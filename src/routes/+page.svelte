@@ -17,8 +17,8 @@
 	const tasks = new CollectionState<Task>({
 		pb, // PocketBase instance
 		collection: 'tasks', // Collection name
-		sort: '-created', // Optional: sort order
-		listen: true // Enable real-time updates
+		filter: 'completed = false',
+		sort: '-created' // Optional: sort order
 	});
 
 	// For the input field
@@ -70,8 +70,6 @@
 
 	{#if tasks.loading && !tasks.data}
 		<p class="status-message">Loading tasks...</p>
-	{:else if tasks.error}
-		<p class="error-message">Error: {tasks.error.message}</p>
 	{:else if !tasks.data || tasks.data.length === 0}
 		<p class="status-message">No tasks yet. Add your first task above!</p>
 	{:else}

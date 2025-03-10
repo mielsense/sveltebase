@@ -1,4 +1,4 @@
-import type { RecordModel, RecordSubscription } from 'pocketbase';
+import type { RecordModel } from 'pocketbase';
 import { PocketBaseState, type PocketBaseStateOptions } from '../utils/pb-state.svelte.js';
 
 export type CollectionStateOptions = PocketBaseStateOptions & {
@@ -84,27 +84,11 @@ export class CollectionState<RecordType extends RecordModel = RecordModel> exten
 		this.fetch_data().then(() => {
 			// Then set up the real-time subscription
 			try {
-				const subscription = this.pb
-					.collection(this.collectionName)
-					.subscribe<RecordType>(
-						this.filterQuery || '*',
-						(data: RecordSubscription<RecordType>) => {
-							if (!this.data) {
-								this.data = [];
-							}
-
-							// Handle different types of events
-							if (data.action === 'create') {
-								this.data = [...this.data, data.record];
-							} else if (data.action === 'update') {
-								this.data = this.data.map((item) =>
-									item.id === data.record.id ? data.record : item
-								);
-							} else if (data.action === 'delete') {
-								this.data = this.data.filter((item) => item.id !== data.record.id);
-							}
-						}
-					);
+				// Subscribe to all collection changes regardless of filter
+				this.pb.collection(this.collectionName).subscribe('*', async () => {
+					// Refetch data to maintain proper filtered dataset
+					await this.fetch_data();
+				});
 
 				this.unsubscribe = () => {
 					this.pb.collection(this.collectionName).unsubscribe();
@@ -128,9 +112,10 @@ export class CollectionState<RecordType extends RecordModel = RecordModel> exten
 		try {
 			const record = await this.pb.collection(this.collectionName).create<RecordType>(data);
 
-			// Optimistic update if not using real-time
-			if (!this.listen && this.data) {
-				this.data = [...this.data, record];
+			// If using real-time, let the subscription handle updates
+			// If not using real-time, add only if it would match our filter
+			if (!this.listen) {
+				await this.fetch_data();
 			}
 
 			return record;
@@ -149,9 +134,10 @@ export class CollectionState<RecordType extends RecordModel = RecordModel> exten
 		try {
 			const record = await this.pb.collection(this.collectionName).update<RecordType>(id, data);
 
-			// Optimistic update if not using real-time
-			if (!this.listen && this.data) {
-				this.data = this.data.map((item) => (item.id === id ? { ...item, ...record } : item));
+			// If using real-time, let the subscription handle updates
+			// If not using real-time, refetch to maintain proper filtered dataset
+			if (!this.listen) {
+				await this.fetch_data();
 			}
 
 			return record;
@@ -170,9 +156,10 @@ export class CollectionState<RecordType extends RecordModel = RecordModel> exten
 		try {
 			await this.pb.collection(this.collectionName).delete(id);
 
-			// Optimistic update if not using real-time
-			if (!this.listen && this.data) {
-				this.data = this.data.filter((item) => item.id !== id);
+			// If using real-time, let the subscription handle updates
+			// If not using real-time, refetch to maintain proper filtered dataset
+			if (!this.listen) {
+				await this.fetch_data();
 			}
 
 			return true;
